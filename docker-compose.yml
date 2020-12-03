@@ -1,11 +1,48 @@
-my-http-listener:
-    image: mendhak/http-https-echo
+---
+version: "2.4"
+
+services:
+
+  test_localnet_ip:
+    image: http-https-echo
+    container_name: http-https-echo
+    build: .
+  
     environment: 
-        - HTTP_PORT=8888
-        - HTTPS_PORT=9999
+        - HTTP_PORT=80
+        - HTTPS_PORT=443
     ports:
-        - "8080:8888"
-        - "8443:9999"
-    # volumes:
+        - "8080:80"
+        - "8443:443"
+        - "80:80"
+        - "443:443"
+
+    volumes:
+        # save rebuilding image each time
+        - ./index.js:/app/index.js
+
     #     - /etc/ssl/certs/ssl-cert-snakeoil.pem:/app/fullchain.pem
     #     - /etc/ssl/private/ssl-cert-snakeoil.key:/app/privkey.pem
+
+
+    networks:
+      HomeLAN:
+        # this will appear on the local LAN (not a virtual IP)
+        ipv4_address: 172.30.5.3
+
+networks:
+  HomeLAN:
+    driver: macvlan
+    driver_opts:
+      # set physical NIC eg. eth0 or physical NIC _and_ VLAN tag here eg. eth0.10
+      parent: eth1
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.30.5.0/24
+          gateway: 172.30.5.254
+          # our range is .1 to .6
+          ip_range: 172.30.5.0/29
+          aux_addresses: 
+            # IPs to ignore in the range above - don't hand these out to the containers
+            rpi_one: 172.30.5.1
