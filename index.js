@@ -1,4 +1,5 @@
-var express = require('express')
+var compression = require('compression');
+var express = require('express');
 const morgan = require('morgan');
 var http = require('http')
 var https = require('https')
@@ -10,7 +11,15 @@ var concat = require('concat-stream');
 app.set('json spaces', 2);
 app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal']);
 
+// this writes the apache logs to stdout
 app.use(morgan('combined'));
+// this is for gzip compression
+app.use(compression());
+
+// don't log any json for these hosts
+const drop_list = [
+  "ido-ble-lib.cn-hongkong.log.aliyuncs.com",
+];
 
 app.use(function(req, res, next){
   req.pipe(concat(function(data){
@@ -19,8 +28,11 @@ app.use(function(req, res, next){
   }));
 });
 
+const myRef = "http-https-echo.homelan.local";
+
 app.all('*', (req, res) => {
   const echo = {
+    reference: myRef,
     path: req.path,
     headers: req.headers,
     method: req.method,
@@ -43,7 +55,13 @@ app.all('*', (req, res) => {
   };
 
   if(req.is('application/json')){
-    echo.json = JSON.parse(req.body)
+    try {
+      echo.json = JSON.parse(req.body);
+    }
+    catch (e) {
+      //echo.req_body = req.body;
+      //pass
+    }
   }
 
   if (process.env.JWT_HEADER) {
@@ -56,11 +74,20 @@ app.all('*', (req, res) => {
       echo.jwt = decoded;
     }
   }
+
+  // send back to client
   res.json(echo);
-  if (process.env.LOG_IGNORE_PATH != req.path) {
-    console.log('-----------------')
-    console.log(JSON.stringify(echo, null, 4));
-  }
+
+  
+  //if (process.env.LOG_IGNORE_PATH != req.path) {
+    //console.log('-----------------')
+    //console.log(JSON.stringify(echo, null, 4));
+
+    // log to stdout and thus elasticsearch
+    if (! echo.headers.host in drop_list) { // don't log if in droplist
+      console.log(JSON.stringify(echo, null)); // one-liner for elasticsearch
+    };
+  //}
 });
 
 const sslOpts = {
